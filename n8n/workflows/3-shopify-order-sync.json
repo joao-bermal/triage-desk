@@ -1,0 +1,141 @@
+{
+  "id": "tdShopifySync01",
+  "name": "Triage Desk · 3 Shopify order sync",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shopify/orders",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "422d8ef7-78e7-53f3-a02e-4f11cc0f7275",
+      "name": "Shopify order webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "5fc304ef-1947-5124-94eb-869637be7159"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Shopify signs the raw body with the app's webhook secret (x-shopify-hmac-sha256, base64).\n// Needs NODE_FUNCTION_ALLOW_BUILTIN=crypto on the n8n instance.\nconst crypto = require('crypto');\nconst item = $input.first();\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst expected = crypto.createHmac('sha256', $env.SHOPIFY_WEBHOOK_SECRET).update(raw).digest('base64');\nconst received = String(item.json.headers['x-shopify-hmac-sha256'] ?? '');\nconst a = Buffer.from(expected);\nconst b = Buffer.from(received);\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('invalid Shopify HMAC');\n\nconst o = JSON.parse(raw.toString('utf8'));\nconst fulfillment = (o.fulfillments ?? [])[0];\nlet status = 'unfulfilled';\nif (o.cancelled_at) status = 'cancelled';\nelse if (o.financial_status === 'refunded') status = 'refunded';\nelse if (o.fulfillment_status === 'fulfilled') status = fulfillment?.shipment_status === 'delivered' ? 'delivered' : 'in_transit';\n\nreturn [{ json: {\n  p_shop_domain: item.json.headers['x-shopify-shop-domain'],\n  p_order: {\n    order_number: String(o.name ?? o.order_number).replace(/^#/, ''),\n    customer_email: o.email ?? o.customer?.email ?? '',\n    status,\n    items: (o.line_items ?? []).map((l) => ({ title: l.title, qty: l.quantity })),\n    total_usd: o.total_price,\n    placed_at: o.created_at,\n    shipped_at: fulfillment?.created_at ?? null,\n    tracking_url: fulfillment?.tracking_url ?? null,\n    external_id: String(o.id),\n  },\n} }];"
+      },
+      "id": "70869e57-7a24-5d44-9372-6c7f27590c2c",
+      "name": "Verify HMAC and map",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/sync_order",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_shop_domain: $json.p_shop_domain, p_order: $json.p_order }) }}"
+      },
+      "id": "a6434cd8-ff46-5b27-92a8-d9435769a5bb",
+      "name": "Upsert order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ca80ffe3-6e47-5775-97fe-5340471cbb12",
+      "name": "OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Shopify order webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify HMAC and map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify HMAC and map": {
+      "main": [
+        [
+          {
+            "node": "Upsert order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert order": {
+      "main": [
+        [
+          {
+            "node": "OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "tdErrorHandler01"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

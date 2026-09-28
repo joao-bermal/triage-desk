@@ -1,0 +1,274 @@
+{
+  "id": "tdApprovedRep01",
+  "name": "Triage Desk · 2 Send approved reply",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support/approved",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "f4e51efc-c835-54ab-8ee5-7e94b48cad48",
+      "name": "Reply approved",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "1146106f-99d8-503d-b641-1705df3d0ef0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $input.first().json;\nif (!$env.N8N_WEBHOOK_SECRET || req.headers['x-webhook-secret'] !== $env.N8N_WEBHOOK_SECRET) {\n  throw new Error('approved-reply webhook called without the shared secret');\n}\nreturn [{ json: { ticket_id: req.body.ticket_id } }];"
+      },
+      "id": "3465ea7d-11ba-575d-97fc-f0bd5dee0497",
+      "name": "Check secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/tickets?id=eq.{{ $json.ticket_id }}&select=id,brand_id,status,subject,customer_email,final_reply,brands(name,support_email)",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "cd5ce8ee-73a6-5a8a-b91e-0e1cd46f42a9",
+      "name": "Load ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const [ticket] = $('Load ticket').all().map((i) => i.json);\nif (!ticket || ticket.status !== 'approved') {\n  // Already sent or changed since the webhook fired: nothing to do.\n  return [];\n}\nconst brand = ticket.brands;\nreturn [{ json: {\n  ticket_id: ticket.id,\n  brand_id: ticket.brand_id,\n  to: ticket.customer_email,\n  from: `${brand.name} <${brand.support_email}>`,\n  subject: ticket.subject?.toLowerCase().startsWith('re:') ? ticket.subject : `Re: ${ticket.subject || 'your message'}`,\n  text: ticket.final_reply,\n} }];"
+      },
+      "id": "848d06df-b9a6-5d3a-b68d-e6e51e2d3223",
+      "name": "Build email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.from }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "65d78d47-c9dc-55e1-b570-9e65122e371d",
+      "name": "Send email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "tdSmtpCredential",
+          "name": "Support SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/tickets?id=eq.{{ $('Build email').item.json.ticket_id }}&status=eq.approved",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'sent', sent_at: new Date().toISOString() }) }}"
+      },
+      "id": "ce83d70a-7dbc-5748-afe7-aa998fbf4c5e",
+      "name": "Mark sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/ticket_events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticket_id: $('Build email').item.json.ticket_id, brand_id: $('Build email').item.json.brand_id, actor: 'n8n', type: 'sent', payload: { to: $('Build email').item.json.to } }) }}"
+      },
+      "id": "6de1132a-cedf-5501-854b-ecfdef9605cb",
+      "name": "Log event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Reply approved": {
+      "main": [
+        [
+          {
+            "node": "Check secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check secret": {
+      "main": [
+        [
+          {
+            "node": "Load ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load ticket": {
+      "main": [
+        [
+          {
+            "node": "Build email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build email": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email": {
+      "main": [
+        [
+          {
+            "node": "Mark sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark sent": {
+      "main": [
+        [
+          {
+            "node": "Log event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "tdErrorHandler01"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
