@@ -2,6 +2,8 @@
 
 AI support triage for multi-brand D2C stores. Every inbound customer message is stored, triaged by a Claude orchestrator agent with specialist sub-agents, and shown to staff with a policy-grounded draft reply they approve in one click. n8n moves the data, Supabase keeps each brand's data isolated with Row Level Security, and a Next.js dashboard on Vercel is where the team works.
 
+**Live demo:** [triage-desk-kappa.vercel.app](https://triage-desk-kappa.vercel.app). Click "Enter the demo" to sign in as a support agent; the tickets reset every day.
+
 Demo brand: [Miau Atelier](https://miauatelier.com) (real policies and catalog), plus a fictional second brand to show brand isolation.
 
 **Design:** [docs/TDD.md](docs/TDD.md) covers architecture, data model, the RLS matrix, the agent design, workflows, environments, testing and risks.
