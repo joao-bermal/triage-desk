@@ -54,7 +54,21 @@ export const PRIORITY_STYLE: Record<TicketPriority, string> = {
   urgent: 'text-red-600 font-semibold',
 };
 
-export const categoryLabel = (c: string | null) => (c ? c.replaceAll('_', ' ') : 'not triaged');
+const CATEGORY_LABEL: Record<string, string> = {
+  order_status: 'Order status',
+  shipping: 'Shipping',
+  returns_refunds: 'Returns and refunds',
+  damaged_or_wrong_item: 'Damaged or wrong item',
+  product_question: 'Product question',
+  sizing_fit: 'Size and fit',
+  pre_sales: 'Before purchase',
+  billing: 'Billing',
+  feedback: 'Feedback',
+  spam: 'Spam',
+  other: 'Other',
+};
+
+export const categoryLabel = (c: string | null) => (c ? (CATEGORY_LABEL[c] ?? c.replaceAll('_', ' ')) : 'Not triaged');
 
 export const TICKET_COLUMNS =
   'id, brand_id, customer_email, customer_name, subject, body, received_at, status, category, priority, sentiment, language, summary, draft_reply, final_reply, confidence, needs_human_reason, order_number, triage_model, triage_ms, triage_input_tokens, triage_output_tokens, triaged_at, approved_at, sent_at';

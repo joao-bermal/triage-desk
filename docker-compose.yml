@@ -3,13 +3,13 @@
 #
 #   cp n8n/.env.example n8n/.env   # fill in the service role key from `npx supabase status`
 #   docker compose up -d
-#   docker compose exec n8n n8n import:workflow --separate --input=/workflows
+#   bash n8n/setup-local.sh        # imports the SMTP credential and workflows, publishes them
 #
 # Editor: http://localhost:5678
 
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n:2.40.7   # version the workflows were tested on
     ports:
       - "5678:5678"
     env_file: n8n/.env
@@ -17,13 +17,13 @@ services:
       - GENERIC_TIMEZONE=America/Sao_Paulo
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false     # workflows read SUPABASE_URL and secrets from $env
       - NODE_FUNCTION_ALLOW_BUILTIN=crypto     # Shopify HMAC verification in a Code node
-      - N8N_RUNNERS_ENABLED=true
       - N8N_DIAGNOSTICS_ENABLED=false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n/workflows:/workflows:ro
+      - ./n8n/credentials:/credentials:ro
 
 volumes:
   n8n_data:

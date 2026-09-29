@@ -55,7 +55,7 @@ export default async function MetricsPage() {
         <ul className="mt-4 flex flex-col gap-2">
           {categories.map(([c, n]) => (
             <li key={c} className="grid grid-cols-[10rem_1fr_2rem] items-center gap-3 text-sm">
-              <span className="capitalize text-stone-600">{categoryLabel(c)}</span>
+              <span className="text-stone-600">{categoryLabel(c)}</span>
               <span className="h-2 rounded-full bg-stone-900" style={{ width: `${(n / max) * 100}%` }} />
               <span className="text-right tabular-nums">{n}</span>
             </li>

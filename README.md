@@ -55,14 +55,35 @@ npx supabase functions serve --env-file supabase/functions/.env
 
 cp n8n/.env.example n8n/.env            # service role key and the same secrets
 docker compose up -d
-docker compose exec n8n n8n import:workflow --separate --input=/workflows
-# In the n8n editor (http://localhost:5678): add an SMTP credential named "Support SMTP", then activate the workflows.
+bash n8n/setup-local.sh                 # imports the SMTP credential and the workflows, publishes all five
 
 npm run dev                             # http://localhost:3000
 INBOUND_WEBHOOK_SECRET=... node scripts/send-demo-messages.mjs
 ```
 
-Local test users are listed at the top of `supabase/seed.sql` (local stack only).
+Local test users are listed at the top of `supabase/seed.sql` (local stack only). Approved replies are delivered to the Mailpit inbox that `supabase start` runs, at http://localhost:54324, so nothing leaves your machine.
+
+## Verified run
+
+Local end to end run on 2026-09-28: the 7 seeded tickets triaged by calling the function directly, plus 3 messages posted through the n8n inbound webhook.
+
+| Message | Result | Why |
+|---|---|---|
+| Where is my cat tree? (MA-1042) | Ready to review, shipping, high | Order found and email matched; draft gives tracking and the delivery window without promising Saturday |
+| Ottoman arrived with a cracked leg | Needs a human | Damage needs a replacement decision, and the report came 9 days after delivery, past the 7 day window |
+| Will the wall nest hold my 14 lb cat? | Ready to review, size and fit | Product specialist: rated for 11 lb, so the draft suggests pieces rated for 22 lb and up |
+| Change my address (MA-1045) | Needs a human | Order still unfulfilled, but the address change is a manual action |
+| Returning the scratcher, box thrown away | Needs a human | No order for the sender email, and the return fails the original packaging rule |
+| SEO agency pitch | Closed as spam | No tools called, no draft |
+| Nordic Paws: can the wool cushion be machine washed? | Needs a human | Catalog has no care details, so the agent will not guess |
+| Cat tower height (via n8n) | Ready to review, before purchase | Answered from the catalog |
+| Following up on MA-1042 (via n8n) | Ready to review, shipping, high | Same order, follow up tone |
+| Quiero devolver el comedero (via n8n) | Needs a human | Replied in Spanish, asks for the order and photos, adds the 2.4 GHz wifi tip from the catalog |
+
+- **Speed and cost:** 19 s per ticket on average (28 s max), about US$0.03 per ticket at Opus 5.5 list prices, US$0.30 for all ten.
+- **Automation:** duplicate Message-IDs return the existing ticket; a wrong inbound secret gets 401; a Shopify webhook with a valid HMAC upserts the order, and a forged one gets 401 and lands in `automation_errors`.
+- **Send path:** approving in the dashboard fired the Postgres trigger, n8n sent the reply from the brand address, and the ticket moved to `sent` live on screen.
+- **Database:** 14 of 14 pgTAP RLS tests pass.
 
 ## Checks
 

@@ -57,7 +57,7 @@ export default async function InboxPage({ searchParams }: PageProps<'/inbox'>) {
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className={`rounded-full px-2 py-0.5 font-medium ${STATUS_STYLE[t.status]}`}>{STATUS_LABEL[t.status]}</span>
                     <span className="text-stone-500">{brandName.get(t.brand_id)}</span>
-                    <span className="capitalize text-stone-500">{categoryLabel(t.category)}</span>
+                    <span className="text-stone-500">{categoryLabel(t.category)}</span>
                     {t.priority && <span className={`capitalize ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>}
                   </div>
                   <p className="mt-1.5 truncate font-medium">{t.subject || '(no subject)'}</p>

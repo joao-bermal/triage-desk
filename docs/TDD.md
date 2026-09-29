@@ -137,13 +137,13 @@ The orchestrator decides which tools to call (in parallel when independent), the
 |---|---|---|---|
 | 1 Inbound message | Webhook `POST /support/inbound` | Validate secret and fields, `ingest_ticket` (idempotent), respond 202, run triage if new | HTTP retries (3 × 5 s), triage timeout 150 s, error workflow, backlog sweep catches anything left in `new` |
 | 2 Send approved reply | Webhook from Postgres (`pg_net` trigger on approval) | Check secret, reload ticket, skip unless still `approved`, send via SMTP, mark `sent`, log event | SMTP retries (3 × 10 s), `status=eq.approved` guard makes the update idempotent |
-| 3 Shopify order sync | Shopify `orders/create`, `orders/updated` | Verify HMAC on raw body, map fields and status, `sync_order` upsert, respond 200 | Invalid HMAC throws; Shopify retries on non-200 |
+| 3 Shopify order sync | Shopify `orders/create`, `orders/updated` | Verify HMAC on raw body, map fields and status, `sync_order` upsert, respond 200 | Invalid HMAC gets 401 and the execution is failed on purpose so the error workflow records it; Shopify retries on other non-200 answers |
 | 4 Backlog sweep | Every 5 minutes | Find tickets still `new` after 2 minutes, retry triage one by one | Per-ticket failures do not stop the batch |
-| 5 Error handler | Any failed execution | Insert into `automation_errors` with node, message and execution link | Service-only table, visible to operators |
+| 5 Error handler | Any failed execution | Insert into `automation_errors` with node, message and execution link | Service-only table, visible to operators. Must be published like the others, or n8n skips it |
 
 ## 8. Environments and delivery
 
-- **Local:** `npx supabase start` (Postgres, Auth, Realtime, edge runtime), n8n via `docker compose`, Next.js dev server.
+- **Local:** `npx supabase start` (Postgres, Auth, Realtime, edge runtime, Mailpit), n8n via `docker compose` pinned to the tested version, Next.js dev server. Approved replies go to Mailpit, so local runs never email real customers.
 - **Preview:** every pull request gets a Vercel preview deployment; database changes ship as migrations reviewed in the same PR.
 - **Production:** `main` deploys to Vercel; migrations applied with `npx supabase db push`; function deployed with `npx supabase functions deploy triage`; secrets set with `npx supabase secrets set`.
 - **Branching:** short-lived feature branches, pull requests into `main`, no direct pushes.

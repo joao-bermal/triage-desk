@@ -24,7 +24,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Shopify signs the raw body with the app's webhook secret (x-shopify-hmac-sha256, base64).\n// Needs NODE_FUNCTION_ALLOW_BUILTIN=crypto on the n8n instance.\nconst crypto = require('crypto');\nconst item = $input.first();\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst expected = crypto.createHmac('sha256', $env.SHOPIFY_WEBHOOK_SECRET).update(raw).digest('base64');\nconst received = String(item.json.headers['x-shopify-hmac-sha256'] ?? '');\nconst a = Buffer.from(expected);\nconst b = Buffer.from(received);\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('invalid Shopify HMAC');\n\nconst o = JSON.parse(raw.toString('utf8'));\nconst fulfillment = (o.fulfillments ?? [])[0];\nlet status = 'unfulfilled';\nif (o.cancelled_at) status = 'cancelled';\nelse if (o.financial_status === 'refunded') status = 'refunded';\nelse if (o.fulfillment_status === 'fulfilled') status = fulfillment?.shipment_status === 'delivered' ? 'delivered' : 'in_transit';\n\nreturn [{ json: {\n  p_shop_domain: item.json.headers['x-shopify-shop-domain'],\n  p_order: {\n    order_number: String(o.name ?? o.order_number).replace(/^#/, ''),\n    customer_email: o.email ?? o.customer?.email ?? '',\n    status,\n    items: (o.line_items ?? []).map((l) => ({ title: l.title, qty: l.quantity })),\n    total_usd: o.total_price,\n    placed_at: o.created_at,\n    shipped_at: fulfillment?.created_at ?? null,\n    tracking_url: fulfillment?.tracking_url ?? null,\n    external_id: String(o.id),\n  },\n} }];"
+        "jsCode": "// Shopify signs the raw body with the app's webhook secret (x-shopify-hmac-sha256, base64).\n// Needs NODE_FUNCTION_ALLOW_BUILTIN=crypto on the n8n instance.\nconst crypto = require('crypto');\nconst item = $input.first();\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst expected = crypto.createHmac('sha256', $env.SHOPIFY_WEBHOOK_SECRET).update(raw).digest('base64');\nconst received = String(item.json.headers['x-shopify-hmac-sha256'] ?? '');\nconst a = Buffer.from(expected);\nconst b = Buffer.from(received);\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return [{ json: { valid: false } }];\n\nconst o = JSON.parse(raw.toString('utf8'));\nconst fulfillment = (o.fulfillments ?? [])[0];\nlet status = 'unfulfilled';\nif (o.cancelled_at) status = 'cancelled';\nelse if (o.financial_status === 'refunded') status = 'refunded';\nelse if (o.fulfillment_status === 'fulfilled') status = fulfillment?.shipment_status === 'delivered' ? 'delivered' : 'in_transit';\n\nreturn [{ json: {\n  valid: true,\n  p_shop_domain: item.json.headers['x-shopify-shop-domain'],\n  p_order: {\n    order_number: String(o.name ?? o.order_number).replace(/^#/, ''),\n    customer_email: o.email ?? o.customer?.email ?? '',\n    status,\n    items: (o.line_items ?? []).map((l) => ({ title: l.title, qty: l.quantity })),\n    total_usd: o.total_price,\n    placed_at: o.created_at,\n    shipped_at: fulfillment?.created_at ?? null,\n    tracking_url: fulfillment?.tracking_url ?? null,\n    external_id: String(o.id),\n  },\n} }];"
       },
       "id": "70869e57-7a24-5d44-9372-6c7f27590c2c",
       "name": "Verify HMAC and map",
@@ -32,6 +32,40 @@
       "typeVersion": 2,
       "position": [
         220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dbff41ff-48cc-5973-97c5-188daa703891",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7adffaf6-e99f-5ac3-a707-83bab772faab",
+      "name": "Signed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
         300
       ]
     },
@@ -57,7 +91,12 @@
           ]
         },
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
         },
         "sendBody": true,
         "specifyBody": "json",
@@ -68,8 +107,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
-        300
+        660,
+        220
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -88,8 +127,38 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
+        880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'invalid signature' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "7146bea8-9e7c-5e3b-9dbb-7b986474614b",
+      "name": "Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
         660,
-        300
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "invalid Shopify HMAC"
+      },
+      "id": "dc61a095-eb56-50cf-b26f-01625d9495a0",
+      "name": "Record forged call",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        880,
+        400
       ]
     }
   ],
@@ -109,7 +178,25 @@
       "main": [
         [
           {
+            "node": "Signed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed?": {
+      "main": [
+        [
+          {
             "node": "Upsert order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unauthorized",
             "type": "main",
             "index": 0
           }
@@ -121,6 +208,17 @@
         [
           {
             "node": "OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unauthorized": {
+      "main": [
+        [
+          {
+            "node": "Record forged call",
             "type": "main",
             "index": 0
           }

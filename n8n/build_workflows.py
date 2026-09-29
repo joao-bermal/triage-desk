@@ -40,13 +40,16 @@ def code(name, js, pos):
     return node(name, "n8n-nodes-base.code", 2, {"jsCode": js}, pos)
 
 
-def http(name, method, url, pos, body=None, headers=None, retry=True, timeout=30000):
+def http(name, method, url, pos, body=None, headers=None, retry=True, timeout=30000, response_format=None):
+    options = {"timeout": timeout}
+    if response_format:
+        options["response"] = {"response": {"responseFormat": response_format}}
     params = {
         "method": method,
         "url": url,
         "sendHeaders": True,
         "headerParameters": {"parameters": headers if headers is not None else SUPABASE_HEADERS},
-        "options": {"timeout": timeout},
+        "options": options,
     }
     if body is not None:
         params.update({"sendBody": True, "specifyBody": "json", "jsonBody": body})
@@ -122,7 +125,9 @@ inbound_nodes = [
     webhook("Inbound message", "support/inbound", [0, 300]),
     code("Validate and normalize", VALIDATE_INBOUND, [220, 300]),
     if_true("Valid?", "={{ $json.ok }}", [440, 300]),
-    respond("Reject", 400, "={{ { error: $json.unauthorized ? 'unauthorized' : 'invalid message', details: $json.errors } }}", [660, 460]),
+    if_true("Bad secret?", "={{ $json.unauthorized }}", [660, 460]),
+    respond("Unauthorized", 401, "={{ { error: 'unauthorized' } }}", [880, 400]),
+    respond("Reject", 400, "={{ { error: 'invalid message', details: $json.errors } }}", [880, 540]),
     http("Store ticket", "POST", "={{ $env.SUPABASE_URL }}/rest/v1/rpc/ingest_ticket", [660, 220],
          body="={{ JSON.stringify({ p_brand_slug: $json.p_brand_slug, p_channel: $json.p_channel, p_external_ref: $json.p_external_ref, p_customer_email: $json.p_customer_email, p_customer_name: $json.p_customer_name, p_subject: $json.p_subject, p_body: $json.p_body }) }}"),
     respond("Accepted", 202, "={{ { ticket_id: $json.ticket_id, duplicate: !$json.created } }}", [880, 220]),
@@ -136,7 +141,9 @@ inbound = workflow("tdInboundMsg0001", "Triage Desk · 1 Inbound message", inbou
     ("Inbound message", "Validate and normalize"),
     ("Validate and normalize", "Valid?"),
     ("Valid?", "Store ticket", 0),
-    ("Valid?", "Reject", 1),
+    ("Valid?", "Bad secret?", 1),
+    ("Bad secret?", "Unauthorized", 0),
+    ("Bad secret?", "Reject", 1),
     ("Store ticket", "Accepted"),
     ("Accepted", "New ticket?"),
     ("New ticket?", "Run triage agent", 0),
@@ -210,7 +217,7 @@ const expected = crypto.createHmac('sha256', $env.SHOPIFY_WEBHOOK_SECRET).update
 const received = String(item.json.headers['x-shopify-hmac-sha256'] ?? '');
 const a = Buffer.from(expected);
 const b = Buffer.from(received);
-if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('invalid Shopify HMAC');
+if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return [{ json: { valid: false } }];
 
 const o = JSON.parse(raw.toString('utf8'));
 const fulfillment = (o.fulfillments ?? [])[0];
@@ -220,6 +227,7 @@ else if (o.financial_status === 'refunded') status = 'refunded';
 else if (o.fulfillment_status === 'fulfilled') status = fulfillment?.shipment_status === 'delivered' ? 'delivered' : 'in_transit';
 
 return [{ json: {
+  valid: true,
   p_shop_domain: item.json.headers['x-shopify-shop-domain'],
   p_order: {
     order_number: String(o.name ?? o.order_number).replace(/^#/, ''),
@@ -238,14 +246,23 @@ return [{ json: {
 shopify_nodes = [
     webhook("Shopify order webhook", "shopify/orders", [0, 300], raw_body=True),
     code("Verify HMAC and map", VERIFY_SHOPIFY, [220, 300]),
-    http("Upsert order", "POST", "={{ $env.SUPABASE_URL }}/rest/v1/rpc/sync_order", [440, 300],
-         body="={{ JSON.stringify({ p_shop_domain: $json.p_shop_domain, p_order: $json.p_order }) }}"),
-    respond("OK", 200, "={{ { ok: true } }}", [660, 300]),
+    if_true("Signed?", "={{ $json.valid }}", [440, 300]),
+    # sync_order returns a bare uuid, which is not a JSON object, so read the response as text.
+    http("Upsert order", "POST", "={{ $env.SUPABASE_URL }}/rest/v1/rpc/sync_order", [660, 220],
+         body="={{ JSON.stringify({ p_shop_domain: $json.p_shop_domain, p_order: $json.p_order }) }}",
+         response_format="text"),
+    respond("OK", 200, "={{ { ok: true } }}", [880, 220]),
+    respond("Unauthorized", 401, "={{ { error: 'invalid signature' } }}", [660, 400]),
+    # Fail the execution after answering, so the error workflow records the forged call.
+    node("Record forged call", "n8n-nodes-base.stopAndError", 1, {"errorMessage": "invalid Shopify HMAC"}, [880, 400]),
 ]
 shopify = workflow("tdShopifySync01", "Triage Desk · 3 Shopify order sync", shopify_nodes, link(
     ("Shopify order webhook", "Verify HMAC and map"),
-    ("Verify HMAC and map", "Upsert order"),
+    ("Verify HMAC and map", "Signed?"),
+    ("Signed?", "Upsert order", 0),
+    ("Signed?", "Unauthorized", 1),
     ("Upsert order", "OK"),
+    ("Unauthorized", "Record forged call"),
 ))
 
 # ---------------------------------------------------------------------------

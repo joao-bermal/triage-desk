@@ -42,7 +42,7 @@ export default async function TicketPage({ params }: PageProps<'/tickets/[id]'>)
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         <span className={`rounded-full px-2 py-0.5 font-medium ${STATUS_STYLE[t.status]}`}>{STATUS_LABEL[t.status]}</span>
         <span className="text-stone-500">{brand?.name}</span>
-        <span className="capitalize text-stone-500">{categoryLabel(t.category)}</span>
+        <span className="text-stone-500">{categoryLabel(t.category)}</span>
         {t.priority && <span className={`capitalize ${PRIORITY_STYLE[t.priority]}`}>{t.priority} priority</span>}
       </div>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{t.subject || '(no subject)'}</h1>

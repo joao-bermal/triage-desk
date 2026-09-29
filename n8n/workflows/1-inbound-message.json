@@ -69,8 +69,59 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "290cbb90-bbba-5665-9077-6c9b1c0864f8",
+              "leftValue": "={{ $json.unauthorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "418686ec-3b3c-54de-918e-19eb9604591e",
+      "name": "Bad secret?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        460
+      ]
+    },
+    {
+      "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { error: $json.unauthorized ? 'unauthorized' : 'invalid message', details: $json.errors } }}",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "7146bea8-9e7c-5e3b-9dbb-7b986474614b",
+      "name": "Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'invalid message', details: $json.errors } }}",
         "options": {
           "responseCode": 400
         }
@@ -80,8 +131,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        660,
-        460
+        880,
+        540
       ]
     },
     {
@@ -240,6 +291,24 @@
         [
           {
             "node": "Store ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bad secret?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bad secret?": {
+      "main": [
+        [
+          {
+            "node": "Unauthorized",
             "type": "main",
             "index": 0
           }

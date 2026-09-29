@@ -55,7 +55,12 @@ export function ReviewPanel({ ticketId, initialReply, editable, status }: { tick
           </button>
         </div>
       )}
-      {message && <p className="mt-3 text-sm text-stone-600">{message}</p>}
+      {/* The page refreshes live, so once n8n marks the ticket sent the approval note is stale. */}
+      {status === 'sent' ? (
+        <p className="mt-3 text-sm text-stone-600">Sent to the customer.</p>
+      ) : (
+        message && <p className="mt-3 text-sm text-stone-600">{message}</p>
+      )}
     </div>
   );
 }
