@@ -6,6 +6,19 @@ Demo brand: [Miau Atelier](https://miauatelier.com) (real policies and catalog),
 
 **Design:** [docs/TDD.md](docs/TDD.md) covers architecture, data model, the RLS matrix, the agent design, workflows, environments, testing and risks.
 
+## Status
+
+A working demo built to production standards, not a production service. The whole flow runs locally and has been verified end to end with real Claude calls (see [Verified run](#verified-run)), with tests for the security rules. It is not deployed, and these pieces would still be needed before real customers used it:
+
+- **Real inbound email.** The inbound webhook takes a normalized message; production needs an inbound email service (Postmark, SendGrid or a Gmail watch) mapped onto it. Attachments such as damage photos are not handled yet.
+- **Real outbound email.** A transactional provider with SPF and DKIM on each brand's domain, and replies threaded into the original conversation.
+- **Hosting.** A Supabase project, a Vercel project and an n8n instance, with the secrets in their secret stores.
+- **Team management.** Staff and brand membership are set in SQL; there is no invite screen.
+- **Shopify app.** The order sync workflow is ready, but needs a custom app per store to register the webhooks.
+- **Operations.** Alerts on `automation_errors`, an automated eval of the triage decisions on every prompt change, and a data retention policy for customer messages.
+
+By design, the agent never acts in the store (refunds, address changes) and nothing is sent without a human approval.
+
 ## How it works
 
 1. An email parser, contact form or `scripts/send-demo-messages.mjs` posts the message to the **n8n** inbound webhook.
