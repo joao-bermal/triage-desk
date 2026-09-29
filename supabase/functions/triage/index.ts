@@ -12,6 +12,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
 import { MODEL, triageTicket } from './agent.ts';
 
 const SECRET = Deno.env.get('TRIAGE_WEBHOOK_SECRET') ?? '';
+// Optional cap on forced re-runs ("Re-run AI triage" in the dashboard) per rolling 24 hours.
+// The public demo sets it so visitors cannot spend the API budget; unset means no cap.
+const FORCED_DAILY_LIMIT = Number(Deno.env.get('FORCED_TRIAGE_DAILY_LIMIT') ?? 0);
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -56,6 +59,15 @@ Deno.serve(async (req) => {
   if (ticketError || !ticket) return json({ error: 'ticket not found' }, 404);
   if (ticket.status !== 'new' && !force) {
     return json({ skipped: true, reason: `ticket is already ${ticket.status}` });
+  }
+  if (force && FORCED_DAILY_LIMIT > 0) {
+    const { count } = await db
+      .from('ticket_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('type', 'triaged')
+      .eq('payload->>forced', 'true')
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    if ((count ?? 0) >= FORCED_DAILY_LIMIT) return json({ error: 'daily re-run limit reached', limit: FORCED_DAILY_LIMIT }, 429);
   }
 
   const [brandRes, policiesRes, productsRes] = await Promise.all([
@@ -114,6 +126,7 @@ Deno.serve(async (req) => {
         tools: outcome.tools,
         usage: outcome.usage,
         refused: outcome.refused,
+        forced: force,
       },
     });
 

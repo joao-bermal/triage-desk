@@ -52,7 +52,11 @@ export async function retriage(ticketId: string) {
     headers: { 'Content-Type': 'application/json', 'x-triage-secret': process.env.TRIAGE_WEBHOOK_SECRET! },
     body: JSON.stringify({ ticket_id: ticketId, force: true }),
   });
-  if (!res.ok) return { error: `Triage failed (${res.status})` };
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (res.status === 429 && body?.limit) return { error: `Re-runs are limited to ${body.limit} a day here. Try again tomorrow.` };
+    return { error: `Triage failed (${res.status})` };
+  }
   revalidatePath(`/tickets/${ticketId}`);
   revalidatePath('/inbox');
   return { ok: true };

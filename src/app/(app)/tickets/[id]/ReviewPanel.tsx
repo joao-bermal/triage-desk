@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
+import { DEMO_MODE } from '@/lib/demo';
 import type { TicketStatus } from '@/lib/tickets';
 
 import { approveReply, retriage, saveDraft, setStatus } from '../../actions';
@@ -34,7 +35,7 @@ export function ReviewPanel({ ticketId, initialReply, editable, status }: { tick
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           <button
             disabled={pending || !reply.trim()}
-            onClick={() => run(() => approveReply(ticketId, reply), 'Approved. n8n is sending the reply.')}
+            onClick={() => run(() => approveReply(ticketId, reply), DEMO_MODE ? 'Approved. Sending is off in the public demo.' : 'Approved. n8n is sending the reply.')}
             className="rounded-lg bg-stone-900 px-4 py-2 font-semibold text-white disabled:opacity-50"
           >
             Approve and send

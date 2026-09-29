@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { DEMO_MODE, REPO_URL } from '@/lib/demo';
 import { requireUser } from '@/lib/supabase/server';
 
 import { signOut } from './actions';
@@ -47,6 +48,17 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
           </div>
         </div>
       </header>
+      {DEMO_MODE && (
+        <div className="border-b border-amber-200 bg-amber-50 text-sm text-amber-900">
+          <p className="mx-auto max-w-6xl px-4 py-2">
+            Public demo. Tickets reset every day at 06:00 UTC. Approved replies are not emailed here: the n8n workflows run in the{' '}
+            <a href={REPO_URL} className="font-medium underline underline-offset-2">
+              local setup
+            </a>
+            .
+          </p>
+        </div>
+      )}
       <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
   );

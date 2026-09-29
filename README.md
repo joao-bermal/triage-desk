@@ -112,6 +112,14 @@ cd supabase/functions/triage && npx deno check index.ts
 - **n8n:** import the workflows on n8n Cloud or a self-hosted instance and set the same environment values (or move them to n8n credentials).
 - **Vercel:** import the repo, set the variables from `.env.example`. Pull requests get preview deployments, `main` goes to production.
 
+### Public demo mode
+
+The hosted demo lets anyone in as a support agent, so it adds three guards:
+
+- `NEXT_PUBLIC_DEMO_MODE=true` on Vercel shows a banner, and `NEXT_PUBLIC_DEMO_EMAIL` and `NEXT_PUBLIC_DEMO_PASSWORD` add an "Enter the demo" button to the login page. The demo user is an `agent`, so it cannot edit policies.
+- `FORCED_TRIAGE_DAILY_LIMIT` in the function secrets caps "Re-run AI triage" per rolling 24 hours, so visitors cannot spend the API budget.
+- After the demo tickets are triaged, `select private.take_demo_snapshot();` saves them, and a `pg_cron` job restores every ticket and event to that snapshot daily at 06:00 UTC. Without a snapshot the job does nothing.
+
 ## Built with
 
 Claude Code as the primary development environment, with the design reviewed in [docs/TDD.md](docs/TDD.md) and every change type checked and tested.

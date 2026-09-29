@@ -4,6 +4,11 @@
 begin;
 select plan(14);
 
+-- Start from a known state: a manual run may already have approved or sent demo-1.
+set local session_replication_role = replica;
+update public.tickets set status = 'triaged', approved_by = null, approved_at = null, sent_at = null where external_ref = 'demo-1';
+set local session_replication_role = origin;
+
 create or replace function pg_temp.act_as(uid uuid)
 returns void language plpgsql as $$
 begin
